@@ -24,9 +24,17 @@ Require Import Chapter1.
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section Chapter4.
 
-Inductive const       := IntC Z | BoolC bool.
-Inductive primitive   := Inc | Dec | Neg | IsZero | Not.
-Inductive prim_result := Result const | PError.
+Inductive const : Set :=
+    | IntC  : Z    -> const
+    | BoolC : bool -> const
+    .
+
+Inductive primitive : Set := Inc | Dec | Neg | IsZero | Not.
+
+Inductive prim_result : Set :=
+    | Result : const -> prim_result
+    | PError : prim_result
+    .
 
 Definition eval_prim (p:primitive) (c:const) : prim_result :=
     match p, c with
@@ -42,12 +50,12 @@ Definition eval_prim (p:primitive) (c:const) : prim_result :=
 Section STLC_with_De_Bruijn_Indices.
 
 Inductive db_exp :=
-    | Const const
-    | Prim primitive db_exp
-    | IfE db_exp db_exp db_exp
-    | Var nat
-    | LamE db_exp
-    | AppE db_exp db_exp
+    | Const : const                      -> db_exp
+    | Prim  : primitive -> db_exp        -> db_exp
+    | IfE   : db_exp -> db_exp -> db_exp -> db_exp
+    | Var   : nat                        -> db_exp
+    | LamE  : db_exp                     -> db_exp
+    | AppE  : db_exp -> db_exp           -> db_exp
     .
 
 (* TODO: syntax "\<up>_ _" [80,80]79 *)
