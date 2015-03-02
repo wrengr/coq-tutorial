@@ -13,6 +13,8 @@ Require Import Coq.Arith.Max.
 Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Le.
 Require Import Coq.Arith.Lt.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.ZArith.ZArith_dec.
 Require Import Omega.
 
 (* For [le_dec] and [lt_dec] *)
@@ -22,17 +24,17 @@ Require Import Chapter1.
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section Chapter4.
 
-Inductive const       := IntC int | BoolC bool.
+Inductive const       := IntC Z | BoolC bool.
 Inductive primitive   := Inc | Dec | Neg | IsZero | Not.
 Inductive prim_result := Result const | PError.
 
 Definition eval_prim (p:primitive) (c:const) : prim_result :=
     match p, c with
-    | Inc,    IntC n  => Result (IntC (1 + n))
-    | Dec,    IntC n  => Result (IntC (n - 1))
-    | Neg,    IntC n  => Result (IntC (-n))
-    | IsZero, IntC n  => Result (BoolC (beq_nat_dec n 0))
-    | Not,    BoolC b => Result (BoolC (\<not> b))
+    | Inc,    IntC n  => Result (IntC (Zsucc n))
+    | Dec,    IntC n  => Result (IntC (Zpred n))
+    | Neg,    IntC n  => Result (IntC (Zopp n))
+    | IsZero, IntC n  => Result (BoolC (if Z_eq_dec n 0 then true else false))
+    | Not,    BoolC b => Result (BoolC (negb b))
     | _, _            => PError
     end.
 
@@ -74,34 +76,45 @@ Fixpoint db_subst  (j:nat) (e:db_exp) (f:db_exp) : db_exp :=
 (* TODO: syntax "\<longmapsto>db" 70 *)
 Inductive reduce_fb_db : db_exp -> db_exp -> Prop :=
     | beta_db
-        : reduce_fb_db (AppE (LamE e) e') ({0\<mapsto>e'}e)
+        : forall e e'
+        , reduce_fb_db (AppE (LamE e) e') (db_subst 0 e' e)
     | c_lambda_db
-        : reduce_fb_db e e'
+        : forall e e'
+        , reduce_fb_db e e'
         -> reduce_fb_db (LamE e) (LamE e')
     | c_app1_fb_db
-        : reduce_fb_db e1 e1'
+        : forall e1 e1' e2
+        , reduce_fb_db e1 e1'
         -> reduce_fb_db (AppE e1 e2) (AppE e1' e2)
     | c_app2_fb_db
-        : reduce_fb_db e2 e2'
+        : forall e1 e2 e2'
+        , reduce_fb_db e2 e2'
         -> reduce_fb_db (AppE e1 e2) (AppE e1 e2')
     | r_prim_fb_db
-        : eval_prim p c = Result c'
+        : forall p c c'
+        , eval_prim p c = Result c'
         -> reduce_fb_db (Prim p (Const c)) (Const c')
     | c_prim_fb_db
-        : reduce_fb_db e e'
+        : forall p e e'
+        , reduce_fb_db e e'
         -> reduce_fb_db (Prim p e) (Prim p e')
     | r_if_true_fb_db
-        : reduce_fb_db (IfE (Const (BoolC True)) e2 e3) e2
+        : forall e2 e3
+        , reduce_fb_db (IfE (Const (BoolC True)) e2 e3) e2
     | r_if_false_fb_db
-        : reduce_fb_db (IfE (Const (BoolC False)) e2 e3) e3
+        : forall e2 e3
+        , reduce_fb_db (IfE (Const (BoolC False)) e2 e3) e3
     | c_if1_fb_db
-        : reduce_fb_db e1 e1'
+        : forall e1 e1' e2 e3
+        , reduce_fb_db e1 e1'
         -> reduce_fb_db (IfE e1 e2 e3) (IfE e1' e2 e3)
     | c_if2_fb_db
-        : reduce_fb_db e2 e2'
+        : forall e1 e2 e2' e3
+        , reduce_fb_db e2 e2'
         -> reduce_fb_db (IfE e1 e2 e3) (IfE e1 e2' e3)
     | c_if3_fb_db
-        : reduce_fb_db e3 e3'
+        : forall e1 e2 e3 e3'
+        , reduce_fb_db e3 e3'
         -> reduce_fb_db (IfE e1 e2 e3) (IfE e1 e2 e3')
     end.
 

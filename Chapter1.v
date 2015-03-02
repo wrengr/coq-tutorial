@@ -551,7 +551,6 @@ Proof.
 Abort.
 
 
-(*
 Lemma insert_bst_helper:
     forall t x y, In x (keys (bst_insert y t)) -> x = y \/ In x (keys t).
 Proof.
@@ -559,11 +558,10 @@ Proof.
     destruct H; auto.
     
     destruct (lt_dec y a).
-      admit.
+      admit. (* TODO *)
       
-      admit.
-Abort.
-*)
+      admit. (* TODO *)
+Qed.
     
    
 Theorem insert_bst : forall x T, BST T -> BST (bst_insert x T).
