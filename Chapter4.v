@@ -76,7 +76,7 @@ Fixpoint db_subst  (j:nat) (e:db_exp) (f:db_exp) : db_exp :=
     | Const c      => Const c
     | Prim p e'    => Prim p (db_subst j e e')
     | IfE e1 e2 e3 => IfE (db_subst j e e1) (db_subst j e e2) (db_subst j e e3)
-    | Var k        => if beq_nat_dec k j then e else Var k
+    | Var k        => if eq_nat_dec k j then e else Var k
     | LamE e'      => LamE (db_subst (S j) (shift 0 e) e')
     | AppE e1 e2   => AppE (db_subst j e e1) (db_subst j e e2)
     end.
@@ -108,10 +108,10 @@ Inductive reduce_fb_db : db_exp -> db_exp -> Prop :=
         -> reduce_fb_db (Prim p e) (Prim p e')
     | r_if_true_fb_db
         : forall e2 e3
-        , reduce_fb_db (IfE (Const (BoolC True)) e2 e3) e2
+        , reduce_fb_db (IfE (Const (BoolC true)) e2 e3) e2
     | r_if_false_fb_db
         : forall e2 e3
-        , reduce_fb_db (IfE (Const (BoolC False)) e2 e3) e3
+        , reduce_fb_db (IfE (Const (BoolC false)) e2 e3) e3
     | c_if1_fb_db
         : forall e1 e1' e2 e3
         , reduce_fb_db e1 e1'
@@ -124,7 +124,7 @@ Inductive reduce_fb_db : db_exp -> db_exp -> Prop :=
         : forall e1 e2 e3 e3'
         , reduce_fb_db e3 e3'
         -> reduce_fb_db (IfE e1 e2 e3) (IfE e1 e2 e3')
-    end.
+    .
 
 (*
 text{*
