@@ -65,7 +65,15 @@ Proof.
     destruct_if.
     
     unfold not in *; intro H; apply set_union_elim in H; inversion H; eauto with listset.
-    admit. (* BUG: why isn't it using the inductive hypotheses? *)
+    (* TODO: automate away this boring case... *)
+    simpl in Ix; unfold not; intro H;
+    apply set_union_elim in H; destruct H;
+      [ eapply IHe1
+      | apply set_union_elim in H; destruct H;
+        [ eapply IHe2
+        | eapply IHe3
+        ]
+      ]; eauto with listset.
 Qed.
 Hint Resolve @freshin_close_intro :listset.
 
