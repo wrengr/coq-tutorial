@@ -15,7 +15,11 @@ Require Import Coq.Arith.Le.
 Require Import Coq.Arith.Lt.
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.ZArith.ZArith_dec.
+Require Import Coq.Classes.EquivDec.
 Require Import Omega.
+
+Require Import WrengrUtil.CoqExtras.ListSet.
+Require Import LNVar.
 
 (* For [le_dec] and [lt_dec] *)
 Require Import Chapter1.
@@ -23,6 +27,10 @@ Require Import Chapter1.
 
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section Chapter4.
+(* We assume some arbitary definition of variables in this section. *)
+Context  {Var : Set}.
+Context `{VT : VarType Var}.
+
 
 Inductive const : Set :=
     | IntC  : Z    -> const
@@ -132,18 +140,19 @@ End STLC_with_De_Bruijn_Indices.
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section STLC_with_Locally_Nameless.
 
-(* boo! *)
-Definition var := nat.
-
 Inductive exp :=
     | Const   : const -> exp
     | Prim    : primitive -> exp -> exp
     | IfE     : exp -> exp -> exp -> exp
-    | FVar    : var -> exp
+    | FVar    : Var -> exp (* use our abstract [Var] type *)
     | BVar    : nat -> exp
     | LambdaE : exp -> exp
     | AppE    : exp -> exp -> exp
     .
+Delimit Scope exp_scope with exp.
+Bind Scope exp_scope with exp.
+Open Scope exp_scope.
+
 
 Definition list_max : list nat -> nat :=
     list_rec (fun _ => nat) 0 (fun x _xs m => max x m).
@@ -198,17 +207,18 @@ Qed.
 
 Definition mklet (e1:exp) (e2:exp) : exp := AppE (LambdaE e2) e1.
 
-(* BUG: why can't we use the [[]] and [[x]] notations here? *)
+
 (* Coq's [app] function has the notation [++], which is like Isabelle's [@] *)
-Fixpoint FV (e:exp) : list var :=
+(* But we use [set] with our LNSet notation, instead of using [list]. *)
+Fixpoint FV (e:exp) : set Var :=
     match e with
-    | Const c      => nil
+    | Const c      => \{}
     | Prim p e     => FV e
-    | IfE e1 e2 e3 => FV e1 ++ FV e2 ++ FV e3
-    | FVar y       => y::nil
-    | BVar k       => nil
+    | IfE e1 e2 e3 => FV e1 \u FV e2 \u FV e3
+    | FVar y       => \{y}
+    | BVar k       => \{}
     | LambdaE e    => FV e
-    | AppE e1 e2   => FV e1 ++ FV e2
+    | AppE e1 e2   => FV e1 \u FV e2
     end.
 
 End STLC_with_Locally_Nameless.
@@ -217,77 +227,190 @@ End STLC_with_Locally_Nameless.
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section Dynamic_Semantics_via_an_Interpreter.
 
+(** Substitution for local/bound-vars. Replace [BVar j] by [e] in [f]. *)
+Fixpoint bsubst (j:nat) (e:exp) (f:exp) : exp :=
+    match f with
+    | Const c      => Const c
+    | Prim p e'    => Prim p (bsubst j e e')
+    | IfE e1 e2 e3 => IfE (bsubst j e e1) (bsubst j e e2) (bsubst j e e3)
+    | FVar x       => FVar x
+    | BVar k       => if eq_nat_dec k j then e else BVar k
+    | LambdaE e'   => LambdaE (bsubst (S j) e e')
+    | AppE e1 e2   => AppE (bsubst j e e1) (bsubst j e e2)
+    end.
+(* Notation was ("{_\<rightarrow>_}_" [54,54,54]53) in Isabelle/HOL *)
+Notation "{{ j ~> e }} f" := (bsubst j e f)
+    (at level 0, i at level 99, right associativity) :exp_scope.
+
+
+(** Substitution for names/free-vars. Replace [FVar x] by [e] in [f]. *)
+Fixpoint subst (x:Var) (e:exp) (f:exp) : exp :=
+    match f with
+    | Const c      => Const c
+    | Prim p e1    => Prim p (subst x e e1)
+    | IfE e1 e2 e3 => IfE (subst x e e1) (subst x e e2) (subst x e e3)
+    | FVar y       => if equiv_dec x y then e else FVar y
+    | BVar k       => BVar k
+    | LambdaE e1    => LambdaE (subst x e e1)
+    | AppE e1 e2   => AppE (subst x e e1) (subst x e e2)
+    end.
+(* Notation was ("[_\<mapsto>_] _" [72,72,72]71) in Isabelle/HOL *)
+Notation "[ x ~> e ] f" := (subst x e f)
+    (at level 0, x at level 99, right associativity) :exp_scope.
+
+
+Lemma subst_id : forall x v e, ~set_In x (FV e) -> subst x v e = e.
+Proof.
+  intros; induction e; simpl in *; auto.
+    rewrite IHe; [ reflexivity | assumption ].
+    
+    rewrite IHe1.
+      rewrite IHe2.
+        rewrite IHe3.
+          reflexivity.
+          solve [auto with listset].
+        solve [auto with listset].
+      solve [auto with listset].
+    
+    destruct (equiv_dec x v0).
+      elimtype False; apply H; left; congruence.
+      
+      reflexivity.
+    
+    rewrite IHe.
+      reflexivity.
+      assumption.
+      
+    rewrite IHe1.
+      rewrite IHe2.
+        reflexivity.
+        solve [auto with listset].
+      solve [auto with listset].
+Qed.
+
+
+Definition VarMap A := list (Var * A).
+Definition env  := VarMap exp.
+
+
+(* TODO: notation "[_] _" [72,72]71 *)
+Fixpoint msubst (rho : env) (e : exp) : exp :=
+    match rho with
+    | nil         => e
+    | (x,v)::rho' => msubst rho' (subst x v e)
+    end.
+
+
+Definition VarMap_dom : forall {A}, VarMap A -> set Var :=
+    fun A =>
+        list_rect (fun _ => set Var)
+            \{}
+            (fun ab _ r => fst ab \a r).
+
+Definition env_dom := VarMap_dom exp.
+
+
+(* TODO: just return a list? use a notation instead in order to abstract over [eq_A_dec]? *)
+Definition assoc_dom
+    {A} (eq_A_dec : forall x y:A, {x = y} + {x <> y})
+    {B}
+    (xs : list (A*B))
+    : set A :=
+        list_to_set A eq_A_dec
+            (list_rect (fun _ => set A)
+                nil
+                (fun ab _ r => fst ab :: r)
+                xs).
+
+
+Lemma msubst_id :
+    forall rho e,
+    (forall x, x \notin (env_dom rho \n FV e)) ->
+    msubst rho e = e.
+Proof.
+  intro rho; induction rho; simpl; intros e H.
+    reflexivity.
+    
+    destruct a; simpl in *.
+    rewrite IHrho.
+      apply subst_id.
+      intro; apply (H v).
+      solve [auto with listset].
+      
+      intros x H0.
+      apply (H x).
+Abort. (* TODO *)
+
+
+
+Inductive result :=
+    | Res     : exp -> result
+    | Error   : result
+    | TimeOut : result
+    .
+
+
+Fixpoint interp (e0:exp) (n0:nat) : result :=
+    match e0, n0 with
+    | Const c,  S n => Res (Const c)
+    | Prim p e, S n =>
+        match interp e n with
+        | Res (Const c) =>
+            match eval_prim p c with
+            | Result c' => Res (Const c')
+            | PError    => Error
+            end
+        | Res _   => Error (* HACK: this case wasn't covered in Isabelle! *)
+        | Error   => Error
+        | TimeOut => TimeOut
+        end
+    | IfE e1 e2 e3, S n =>
+        match interp e1 n with
+        | Res (Const (BoolC true))  => interp e2 n
+        | Res (Const (BoolC false)) => interp e3 n
+        | _                         => Error
+        end
+    | FVar x,     S n => Error
+    | BVar k,     S n => Error
+    | LambdaE e,  S n => Res (LambdaE e)
+    | AppE e1 e2, S n =>
+        match interp e1 n, interp e2 n with
+        | Res (LambdaE e), Res v   => interp (bsubst 0 v e) n
+        | TimeOut,         _       => TimeOut
+        | _,               TimeOut => TimeOut
+        | _,               _       => Error
+      end
+    | _, 0 => TimeOut
+    end.
+
+
+Lemma inv_interp_if
+    :  forall e1 e2 e3 n' v P
+    ,  interp (IfE e1 e2 e3) n' = Res v
+    -> (forall n b
+        ,  n' = S n
+        -> interp e1 n = Res (Const (BoolC b))
+        -> (if b then interp e2 n =  Res v else interp e3 n = Res v)
+        -> P)
+    -> P.
+Proof.
+  (* all the inversions on H are to prune off impossible branches *)
+  intros.
+  destruct n'; simpl in *; try solve [inversion H].
+  remember (interp e1 n'). (* Introduces an equality, needed for #1 *)
+  destruct r; try solve [inversion H].
+  destruct e; try solve [inversion H].
+  destruct c; try solve [inversion H].
+  apply (X n' b). (* N.B., if we change P to (P:Prop) then X becomes H0 *)
+    reflexivity.
+    
+    symmetry; assumption. (* #1 *)
+    
+    destruct b; assumption.
+Qed.
+
+
 (*
-primrec bsubst :: "nat \<Rightarrow> exp \<Rightarrow> exp \<Rightarrow> exp" ("{_\<rightarrow>_}_" [54,54,54] 53) where
-  "{j\<rightarrow>e} (Const c) = Const c" |
-  "{j\<rightarrow>e} (Prim p e') = Prim p ({j\<rightarrow>e} e')" |
-  "{j\<rightarrow>e} (IfE e1 e2 e3) = IfE ({j\<rightarrow>e} e1) ({j\<rightarrow>e} e2) ({j\<rightarrow>e} e3)" |
-  "{j\<rightarrow>e} (FVar x) = FVar x" |
-  "{j\<rightarrow>e} (BVar k) = (if k = j then e else BVar k)" |
-  "{j\<rightarrow>e} (LambdaE e') = LambdaE ({(Suc j)\<rightarrow>e} e')" |
-  "{j\<rightarrow>e} (AppE e1 e2) = AppE ({j\<rightarrow>e} e1) ({j\<rightarrow>e} e2)"
-
-primrec subst :: "var \<Rightarrow> exp \<Rightarrow> exp \<Rightarrow> exp" ("[_\<mapsto>_] _" [72,72,72] 71) where
-  "[x\<mapsto>v] (Const c) = (Const c)" |
-  "[x\<mapsto>v] (Prim p e1) = Prim p ([x\<mapsto>v]e1)" |
-  "[x\<mapsto>v] (IfE e1 e2 e3) = IfE ([x\<mapsto>v]e1) ([x\<mapsto>v]e2) ([x\<mapsto>v]e3)" |
-  "[x\<mapsto>v] (FVar y) = (if x = y then v else (FVar y))" |
-  "[x\<mapsto>v] (BVar k) = BVar k" |
-  "[x\<mapsto>v] (LambdaE e) = LambdaE ([x\<mapsto>v]e)" |
-  "[x\<mapsto>v] (AppE e1 e2) = AppE ([x\<mapsto>v]e1) ([x\<mapsto>v]e2)"
-
-lemma subst_id: fixes e::exp 
-  assumes xfv: "x \<notin> set (FV e)" shows "[x\<mapsto>v]e = e"
-  using xfv by (induction e) force+ 
-
-type_synonym env = "(var \<times> exp) list"
-
-fun msubst :: "env \<Rightarrow> exp \<Rightarrow> exp" ("[_] _" [72,72] 71) where
-  "msubst [] e = e" |
-  "msubst ((x,v)#\<rho>) e = msubst \<rho> ([x\<mapsto>v]e)"
-
-abbreviation assoc_dom :: "('a \<times> 'b) list \<Rightarrow> 'a set" where
- "assoc_dom \<Gamma> \<equiv> set (map fst \<Gamma>)"
-
-lemma msubst_id: fixes e::exp
-  assumes rfv: "assoc_dom \<rho> \<inter> set (FV e) = {}" shows "[\<rho>]e = e"
-  using rfv apply (induction \<rho> arbitrary: e) apply simp using subst_id by auto
-
-datatype result = Res exp | Error | TimeOut
-
-
-fun interp :: "exp \<Rightarrow> nat \<Rightarrow> result" where
-  "interp (Const c) (Suc n) = Res (Const c)" |
-  "interp (Prim p e) (Suc n) = 
-     (case interp e n of 
-         Res (Const c) \<Rightarrow> (case eval_prim p c of
-                            Result c' \<Rightarrow> Res (Const c')
-                          | PError \<Rightarrow> Error)
-     | Error \<Rightarrow> Error | TimeOut \<Rightarrow> TimeOut)" |
-  "interp (IfE e1 e2 e3) (Suc n) =
-        (case interp e1 n of
-          Res (Const (BoolC True)) \<Rightarrow> interp e2 n
-        | Res (Const (BoolC False)) \<Rightarrow> interp e3 n
-        | _ \<Rightarrow> Error)" |
-  "interp (FVar x) (Suc n) = Error" |
-  "interp (BVar k) (Suc n) = Error" |
-  "interp (LambdaE e) (Suc n) = Res (LambdaE e)" |
-  "interp (AppE e1 e2) (Suc n) =
-      (case (interp e1 n, interp e2 n) of
-        (Res (LambdaE e), Res v) \<Rightarrow> interp (bsubst 0 v e) n
-      | (TimeOut, _) \<Rightarrow> TimeOut | (_, TimeOut) \<Rightarrow> TimeOut | (_,_) \<Rightarrow> Error)" |
-  "interp _ 0 = TimeOut"
-
-
-lemma inv_interp_if: 
-  "\<lbrakk> interp (IfE e1 e2 e3) n' = Res v;
-     \<And> n b. \<lbrakk> n' = Suc n; interp e1 n = Res (Const (BoolC b));
-              b \<longrightarrow> interp e2 n = Res v; \<not> b \<longrightarrow> interp e3 n = Res v
-    \<rbrakk> \<Longrightarrow> P \<rbrakk> \<Longrightarrow> P"
-  apply (case_tac n') apply force apply (case_tac "interp e1 nat", auto)
-  apply (case_tac exp, auto) apply (case_tac const) apply force apply force
-done
-
 lemma inv_interp_app:
   "\<lbrakk> interp (AppE e1 e2) n' = Res v;
      \<And> n e v2. \<lbrakk> n' = Suc n; interp e1 n = Res (LambdaE e); 
