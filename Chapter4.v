@@ -694,45 +694,63 @@ Inductive wt : ty_env -> exp -> ty -> Prop :=
         -> wt Γ e2 T
         -> wt Γ (AppE e1 e2) T'
     .
+
+
+Inductive well_typed : ty_env -> exp -> ty -> Prop :=
+    | wt_const
+        : forall Γ c T
+        ,  const_type c = T
+        -> well_typed Γ (Const c) T
+    | wt_prim
+        : forall Γ p e T1 T2
+        ,  well_typed Γ e T1
+        -> prim_type p = (T1, T2)
+        -> well_typed Γ (Prim p e) T2
+    | wt_if
+        : forall Γ e1 e2 e3 T
+        ,  well_typed Γ e1 BoolT
+        -> well_typed Γ e2 T
+        -> well_typed Γ e3 T
+        -> well_typed Γ (IfE e1 e2 e3) T
+    | wt_var
+        : forall Γ x T
+        ,  lookup x Γ = Some T
+        -> well_typed Γ (FVar x) T
+    | wt_lambda
+        : forall Γ e L T1 T2
+        ,  (forall x, x \notin L -> well_typed ((x,T1)::Γ) (∆x·e) T2)
+        -> well_typed Γ (LambdaE e) (FunT T1 T2)
+    | wt_app
+        : forall Γ e1 e2 T T'
+        ,  well_typed Γ e1 (FunT T T')
+        -> well_typed Γ e2 T
+        -> well_typed Γ (AppE e1 e2) T'
+    .
+
+
+Definition wt_env : ty_env -> env -> Prop
+    := pointwise (well_typed nil).
+
+End Type_System.
+
+(* Technically we should be using [⊦] instead of [⊢] *)
+
 (* Notation was ("_ \<turnstile>o _ : _" [60,60,60] 59) *)
-(* Technically we should use [⊦] instead of [⊢] *)
 Notation "Γ ⊢o e : T" := (wt Γ e T)
     (at level 0, e at level 99, no associativity) :type_scope.
+(* Notation was ("_ \<turnstile> _ : _" [60,60,60] 59) *)
+Notation "Γ ⊢ e : T" := (well_typed Γ e T)
+    (at level 0, e at level 99, no associativity) :type_scope.
+(* Notation was ("_ \<turnstile> _ " [60,60] 59) *)
+Notation "Γ ⊢g ρ" := (wt_env Γ ρ)
+    (at level 0, no associativity) :type_scope.
+
+
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+Section Properties_of_Substitution.
+Open Scope exp_scope. (* need to reopen since the old section was closed *)
 
 (*
-inductive well_typed :: "ty_env => exp => ty => bool" ("_ ⊢ _ : _" [60,60,60] 59) where
-  wt_const : "[| const_type c = T |] ==> Γ ⊢ Const c : T" |
-  wt_prim : "[| Γ ⊢ e : T1; prim_type p = (T1, T2) |]
-          ==> Γ ⊢ Prim p e : T2" |
-  wt_if : "[| Γ ⊢ e1 : BoolT; Γ ⊢ e2 : T; Γ ⊢ e3 : T |] 
-                    ==> Γ ⊢ IfE e1 e2 e3 : T" |
-  wt_var : "[| lookup x Γ = Some T |] ==> Γ ⊢ FVar x : T" |
-  wt_lambda : "[| \<forall> x. x \<notin> set L \<longrightarrow> (x,T1)::Γ ⊢ (∆x·e) : T2 |] 
-          ==> Γ ⊢ LambdaE e : T1\<rightarrow>T2" |
-  wt_app : "[| Γ ⊢ e1 : T \<rightarrow> T'; Γ ⊢ e2 : T |] 
-          ==> Γ ⊢ AppE e1 e2 : T'"
-
-inductive_cases
-  inv_wt_fvar[elim!]: "Γ ⊢ FVar x : T" and
-  inv_wt_bvar[elim!]: "Γ ⊢ BVar k : T" and
-  inv_wt_const[elim!]: "Γ ⊢ Const c : T" and
-  inv_wt_prim[elim!]: "Γ ⊢ Prim p e : T" and
-  inv_wt_lambda[elim!]: "Γ ⊢ LambdaE e : T" and
-  inv_wt_app[elim!]: "Γ ⊢ AppE e1 e2 : T"
-
-
-inductive wt_env :: "ty_env => env => bool" ("_ ⊢ _" [60,60] 59) where
-wt_nil : "[] ⊢ []" |
-wt_cons : "[| [] ⊢ v : T; Γ ⊢ ρ |] ==> (x,T)::Γ ⊢ (x,v)::ρ"
-
-inductive_cases
-  inv_wt_nil[elim!]: "Γ ⊢ []" and
-  inv_wt_cons[elim!]: "Γ ⊢ (x,v)::ρ"
-
-
-section "Properties of Substitution" 
-
-
 lemma bsubst_cross[rule_format]:
   "\<forall> (i::nat) j u v. i \<noteq> j \<and> {i\<rightarrow>u}({j\<rightarrow>v}t) = {j\<rightarrow>v}t \<longrightarrow> {i\<rightarrow>u}t = t"
   apply (induction t)

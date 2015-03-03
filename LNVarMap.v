@@ -99,5 +99,34 @@ End LNVarMap.
 (* Undo the implicitness of [Var] and [A] for [VarMap]. *)
 Implicit Arguments VarMap [].
 
+
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+Section DerivedOperations.
+Context  {Var : Set}.
+Context `{VT : VarType Var}.
+Context  {exp : Type}.
+Context  {ty  : Type}.
+Implicit Type x : Var.
+Implicit Type e : exp.
+Implicit Type t : ty.
+
+Definition env := VarMap Var exp.
+Implicit Type ρ : env.
+
+Definition ty_env := VarMap Var ty.
+Implicit Type Γ : ty_env.
+
+Inductive pointwise (R : exp -> ty -> Prop) : ty_env -> env -> Prop :=
+    | pointwise_nil
+        : pointwise R nil nil
+    | pointwise_cons
+        : forall Γ ρ x e t
+        ,  R e t
+        -> pointwise R Γ ρ
+        -> pointwise R ((x,t)::Γ) ((x,e)::ρ)
+    .
+
+End DerivedOperations.
+
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ fin. *)
