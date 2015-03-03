@@ -64,16 +64,20 @@ Proof.
   intros; generalize 0 as i; induction e; intros; simpl; auto with listset.
     destruct_if.
     
-    unfold not in *; intro H; apply set_union_elim in H; inversion H; eauto with listset.
+    (* HACK: why is the [in *] required for this unfold but not the other one? *)
+    unfold not in *; intro H;
+    apply set_union_elim in H; destruct H;
+    eauto with listset.
+    
     (* TODO: automate away this boring case... *)
-    simpl in Ix; unfold not; intro H;
+    unfold not; intro H;
     apply set_union_elim in H; destruct H;
       [ eapply IHe1
       | apply set_union_elim in H; destruct H;
         [ eapply IHe2
         | eapply IHe3
         ]
-      ]; eauto with listset.
+      ]; simpl in Ix; eauto with listset.
 Qed.
 Hint Resolve @freshin_close_intro :listset.
 
@@ -88,13 +92,14 @@ Proof.
     destruct_if in Ix; auto; intro H; inversion H; auto; congruence.
     
     (* TODO: better automation to hande these two cases... *)
-    unfold not; intro H; apply set_union_elim in H;
-    inversion H; [ apply (IHe1 i) | apply (IHe2 i) ]; auto with listset.
+    unfold not; intro H;
+    apply set_union_elim in H; destruct H;
+    [ apply (IHe1 i) | apply (IHe2 i) ]; auto with listset.
     
     unfold not; intro H;
-    apply set_union_elim in H; inversion H;
+    apply set_union_elim in H; destruct H;
       [ apply (IHe1 i)
-      | apply set_union_elim in H0; inversion H0;
+      | apply set_union_elim in H; destruct H;
         [ apply (IHe2 i)
         | apply (IHe3 i)
         ]
@@ -301,9 +306,9 @@ Proof.
     (* [destruct] is cleaner than [apply set_union_elim in H; inversion H] *)
     (* TODO: better automation to automatically cover this last case... *)
     | unfold not; intro H;
-      apply set_union_elim in H; inversion H;
+      apply set_union_elim in H; destruct H;
         [ apply (IHe1 i)
-        | apply set_union_elim in H0; inversion H0;
+        | apply set_union_elim in H; destruct H;
           [ apply (IHe2 i)
           | apply (IHe3 i)
           ]
@@ -476,9 +481,9 @@ Proof.
     
     (* TODO: better automation to handle this boring case... *)
     | unfold not; intro H;
-      apply set_union_elim in H; inversion H;
+      apply set_union_elim in H; destruct H;
         [ apply IHe1
-        | apply set_union_elim in H0; inversion H0;
+        | apply set_union_elim in H; destruct H;
           [ apply IHe2
           | apply IHe3
           ]
