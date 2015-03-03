@@ -315,6 +315,36 @@ Fixpoint Is_Sorted (xs : list nat) : Prop :=
     | nil      => True
     | x :: xs' => (forall y, In y xs' -> x <= y) /\ Is_Sorted xs'
     end.
+
+(* If we prefered to have explicit proof constructors we could
+instead define:
+
+    Inductive Is_Sorted : list nat -> Prop :=
+        | nil_is_sorted : Is_Sorted nil
+        | cons_is_sorted : forall x xs', 
+            (forall y, In y xs' -> x <= y) ->
+            Is_Sorted xs' ->
+            Is_Sorted (x::xs')
+        .
+
+These two definitions are proof-theoretically equivalent; the
+datatype version just uses [nil_is_sorted] instead of [I] when
+proving [Is_Sorted nil], and uses [cons_is_sorted] instead of [conj]
+when proving [Is_Sorted (x::xs)]. This is like how we can define
+lists either by:
+
+    Inductive list A := nil : list A | cons : A -> list A -> list A.
+
+Or by:
+
+    Fixpoint list A := unit + (A * list A).
+
+By using an inductive data type definition we get the inductive
+principle for free, which is nice. Whereas, by relying on more
+primitive types like [True]/[unit], [and]/[prod] and [or]/[sum] we
+can use library functions to handle these primitive types, which
+can also be nice. It's an aesthetic and engineering tradeoff.
+*)
     
 
 End Structural_Induction_on_Lists.
@@ -355,7 +385,8 @@ Proof.
       
       intro z.
       apply le_n_S.
-      (* Could also use [plus_comm] twice, instead of using [plus_Snm_nSm] *)
+      (* Could also use [plus_comm] before and after the [simpl],
+         instead of using [plus_Snm_nSm] *)
       rewrite <- plus_Snm_nSm.
       simpl.
       apply le_S.
@@ -587,6 +618,7 @@ Proof.
 Qed.
 
 
+(* In this version [search t x] is a proposition... *)
 Fixpoint search (t : tree nat) (x : nat) : Prop :=
     match t with
     | Leaf       => False
@@ -598,6 +630,26 @@ Fixpoint search (t : tree nat) (x : nat) : Prop :=
             then search R x
             else True
     end.
+
+
+(* But if we want to be able to search at runtime, we'd want this
+   version which returns a runtime [bool] value. Note that the
+   [sumbool] type (i.e., [{P}+{Q}]) returned by [lt_dec] will be
+   erased to the [bool] type at runtime; that's why we can use
+   [lt_dec] to decide whether one thing is less than another at
+   runtime. *)
+Fixpoint searchb (t : tree nat) (x : nat) : bool :=
+    match t with
+    | Leaf       => false
+    | Node L y R =>
+        if lt_dec x y
+        then searchb L x
+        else
+            if lt_dec y x
+            then searchb R x
+            else true
+    end.
+
  
 End Inductive_Definitions.
 End Chapter1.
