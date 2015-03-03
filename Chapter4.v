@@ -47,183 +47,177 @@ Definition eval_prim (p:primitive) (c:const) : prim_result :=
     end.
 
 
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 Section STLC_with_De_Bruijn_Indices.
 
 Inductive db_exp :=
-    | Const : const                      -> db_exp
-    | Prim  : primitive -> db_exp        -> db_exp
-    | IfE   : db_exp -> db_exp -> db_exp -> db_exp
-    | Var   : nat                        -> db_exp
-    | LamE  : db_exp                     -> db_exp
-    | AppE  : db_exp -> db_exp           -> db_exp
+    | DBConst : const                      -> db_exp
+    | DBPrim  : primitive -> db_exp        -> db_exp
+    | DBIf    : db_exp -> db_exp -> db_exp -> db_exp
+    | DBVar   : nat                        -> db_exp
+    | DBLam   : db_exp                     -> db_exp
+    | DBApp   : db_exp -> db_exp           -> db_exp
     .
 
 (* TODO: syntax "\<up>_ _" [80,80]79 *)
 Fixpoint shift (c:nat) (e:db_exp) : db_exp :=
     match e with
-    | Const k      => Const k
-    | Prim p e     => Prim p (shift c e)
-    | IfE e1 e2 e3 => IfE (shift c e1) (shift c e2) (shift c e3)
-    | Var k        => if lt_dec k c then Var k else Var (S k)
-    | LamE e       => LamE (shift (S c) e)
-    | AppE e1 e2   => AppE (shift c e1) (shift c e2)
+    | DBConst k     => DBConst k
+    | DBPrim p e    => DBPrim p (shift c e)
+    | DBIf e1 e2 e3 => DBIf (shift c e1) (shift c e2) (shift c e3)
+    | DBVar k       => if lt_dec k c then DBVar k else DBVar (S k)
+    | DBLam e       => DBLam (shift (S c) e)
+    | DBApp e1 e2   => DBApp (shift c e1) (shift c e2)
     end.
 
 
 (* TODO: syntax "{_\<mapsto>_}_" [54,54,54]53 *)
 Fixpoint db_subst  (j:nat) (e:db_exp) (f:db_exp) : db_exp :=
     match f with
-    | Const c      => Const c
-    | Prim p e'    => Prim p (db_subst j e e')
-    | IfE e1 e2 e3 => IfE (db_subst j e e1) (db_subst j e e2) (db_subst j e e3)
-    | Var k        => if eq_nat_dec k j then e else Var k
-    | LamE e'      => LamE (db_subst (S j) (shift 0 e) e')
-    | AppE e1 e2   => AppE (db_subst j e e1) (db_subst j e e2)
+    | DBConst c     => DBConst c
+    | DBPrim p e'   => DBPrim p (db_subst j e e')
+    | DBIf e1 e2 e3 => DBIf (db_subst j e e1) (db_subst j e e2) (db_subst j e e3)
+    | DBVar k       => if eq_nat_dec k j then e else DBVar k
+    | DBLam e'      => DBLam (db_subst (S j) (shift 0 e) e')
+    | DBApp e1 e2   => DBApp (db_subst j e e1) (db_subst j e e2)
     end.
 
 (* TODO: syntax "\<longmapsto>db" 70 *)
 Inductive reduce_fb_db : db_exp -> db_exp -> Prop :=
     | beta_db
         : forall e e'
-        , reduce_fb_db (AppE (LamE e) e') (db_subst 0 e' e)
+        , reduce_fb_db (DBApp (DBLam e) e') (db_subst 0 e' e)
     | c_lambda_db
         : forall e e'
         , reduce_fb_db e e'
-        -> reduce_fb_db (LamE e) (LamE e')
+        -> reduce_fb_db (DBLam e) (DBLam e')
     | c_app1_fb_db
         : forall e1 e1' e2
         , reduce_fb_db e1 e1'
-        -> reduce_fb_db (AppE e1 e2) (AppE e1' e2)
+        -> reduce_fb_db (DBApp e1 e2) (DBApp e1' e2)
     | c_app2_fb_db
         : forall e1 e2 e2'
         , reduce_fb_db e2 e2'
-        -> reduce_fb_db (AppE e1 e2) (AppE e1 e2')
+        -> reduce_fb_db (DBApp e1 e2) (DBApp e1 e2')
     | r_prim_fb_db
         : forall p c c'
         , eval_prim p c = Result c'
-        -> reduce_fb_db (Prim p (Const c)) (Const c')
+        -> reduce_fb_db (DBPrim p (DBConst c)) (DBConst c')
     | c_prim_fb_db
         : forall p e e'
         , reduce_fb_db e e'
-        -> reduce_fb_db (Prim p e) (Prim p e')
+        -> reduce_fb_db (DBPrim p e) (DBPrim p e')
     | r_if_true_fb_db
         : forall e2 e3
-        , reduce_fb_db (IfE (Const (BoolC true)) e2 e3) e2
+        , reduce_fb_db (DBIf (DBConst (BoolC true)) e2 e3) e2
     | r_if_false_fb_db
         : forall e2 e3
-        , reduce_fb_db (IfE (Const (BoolC false)) e2 e3) e3
+        , reduce_fb_db (DBIf (DBConst (BoolC false)) e2 e3) e3
     | c_if1_fb_db
         : forall e1 e1' e2 e3
         , reduce_fb_db e1 e1'
-        -> reduce_fb_db (IfE e1 e2 e3) (IfE e1' e2 e3)
+        -> reduce_fb_db (DBIf e1 e2 e3) (DBIf e1' e2 e3)
     | c_if2_fb_db
         : forall e1 e2 e2' e3
         , reduce_fb_db e2 e2'
-        -> reduce_fb_db (IfE e1 e2 e3) (IfE e1 e2' e3)
+        -> reduce_fb_db (DBIf e1 e2 e3) (DBIf e1 e2' e3)
     | c_if3_fb_db
         : forall e1 e2 e3 e3'
         , reduce_fb_db e3 e3'
-        -> reduce_fb_db (IfE e1 e2 e3) (IfE e1 e2 e3')
+        -> reduce_fb_db (DBIf e1 e2 e3) (DBIf e1 e2 e3')
     .
 
+End STLC_with_De_Bruijn_Indices.
+
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+Section STLC_with_Locally_Nameless.
+
+(* boo! *)
+Definition var := nat.
+
+Inductive exp :=
+    | Const   : const -> exp
+    | Prim    : primitive -> exp -> exp
+    | IfE     : exp -> exp -> exp -> exp
+    | FVar    : var -> exp
+    | BVar    : nat -> exp
+    | LambdaE : exp -> exp
+    | AppE    : exp -> exp -> exp
+    .
+
+Definition list_max : list nat -> nat :=
+    list_rec (fun _ => nat) 0 (fun x _xs m => max x m).
+
+
+(* Why isn't this in the standard library? *)
+Lemma zero_lt : forall {x y}, x < y -> 0 < y.
+Proof.
+  intros; destruct (eq_nat_dec 0 x); [ subst; assumption | omega ].
+Qed.
+
+
+(* Why isn't this in the standard library? *)
+Lemma max_lt : forall {x y z}, max x y < z -> x < z /\ y < z.
+Proof.
+  intro x; induction x; simpl.
+    intros y z y_lt_z; split;
+      [ eapply zero_lt; eassumption
+      | exact y_lt_z
+      ].
+    
+    intros y z H; destruct y; simpl in *.
+      destruct z.
+        inversion H. (* absurd *)
+        
+        apply lt_S_n in H.
+        split; omega.
+      
+      destruct z.
+        inversion H. (* absurd *)
+        
+        apply lt_S_n in H.
+        destruct (IHx y z H).
+        split; omega.
+Qed.
+  
+    
+Lemma list_max_fresh : forall {n xs} , list_max xs < n -> ~In n xs.
+Proof.
+  intros n xs.
+  revert n.
+  induction xs; simpl; intros n H.
+    auto.
+    
+    destruct (max_lt H) as [H0 H1].
+    intro H2; destruct H2.
+      omega. (* absurd *)
+      
+      exact (IHxs n H1 H2). (* or: [eapply IHxs; eassumption.] *)
+Qed.
+
+
+Definition mklet (e1:exp) (e2:exp) : exp := AppE (LambdaE e2) e1.
+
+(* BUG: why can't we use the [[]] and [[x]] notations here? *)
+(* Coq's [app] function has the notation [++], which is like Isabelle's [@] *)
+Fixpoint FV (e:exp) : list var :=
+    match e with
+    | Const c      => nil
+    | Prim p e     => FV e
+    | IfE e1 e2 e3 => FV e1 ++ FV e2 ++ FV e3
+    | FVar y       => y::nil
+    | BVar k       => nil
+    | LambdaE e    => FV e
+    | AppE e1 e2   => FV e1 ++ FV e2
+    end.
+
+End STLC_with_Locally_Nameless.
+
+
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+Section Dynamic_Semantics_via_an_Interpreter.
+
 (*
-text{*
-
-  While De Bruijn indices give us a rock-solid way to define substitution
-  correctly, the need to shift expressions during substitution 
-  induces a fair bit of complexity and the need for many
-  technical lemmas regarding shifting. We shall consider an alternative
-  approach in the next section.
-
-*}
-
-
-section "STLC with Locally Nameless"
-
-text{*
-
-  The paper that introduces De Bruijn indices~\cite{Bruijn:1972kx}
-  also mentioned a hybrid approach which became known as
-  \emph{locally-nameless} in which De Bruijn indices are used for
-  bound variables and names are used for free variables. With
-  this approach, there is no need to perform shifting because the free
-  variables are no longer De Bruijn indices, they are names.  Further,
-  we don't have to worry about these names being accidentally captured
-  because binding only applies to De Bruijn indices.  More recently,
-  researchers have shown how to work with the locally-nameless
-  approach in the context of mechanized proofs~\cite{Aydemir:2008rr},
-  which we will follow here.
-  
-  The following is the definition of the AST for the STLC:
-  we have removed 'let' expressions and added support for
-  first-class functions, which includes function creation
-  via lambda, function application, and both free variables
-  (\textit{FVar}) and bound variables (\textit{BVar}).
-
-*}
-
-type_synonym var = nat
-
-datatype exp = Const const | Prim primitive exp | IfE exp exp exp
-    | FVar var | BVar nat | LambdaE exp | AppE exp exp
-
-text{*
-
-  Here we also use natural numbers for the free variables because
-  that makes it easier to choose a free variable that is different
-  from a list of free variables.  One can simply add one to the max
-  of the list!
-
-*}
-
-abbreviation list_max :: "nat list \<Rightarrow> nat" where
-  "list_max ls \<equiv> foldr max ls (0::nat)"
-
-lemma list_max_fresh: fixes n::nat
-  assumes g: "list_max ls < n" shows "n \<notin> set ls"
-using g by (induction ls arbitrary: n) auto
-
-text{*
-  
-  We recover 'let' by encoding it in terms of lambda and application.
-
-*}
-
-abbreviation mklet :: "exp \<Rightarrow> exp \<Rightarrow> exp" where
-  "mklet e1 e2 \<equiv> AppE (LambdaE e2) e1"
-
-text{*
-
-  Returning to the notion of free variables, the following function
-  collects a list of all of the free variables in an expression.
-  The list may contain duplicates, and that's ok.
-
-*}
-
-primrec FV :: "exp \<Rightarrow> var list" where
-  "FV (Const c) = []" |
-  "FV (Prim p e) = FV e" |
-  "FV (IfE e1 e2 e3) = (FV e1 @ FV e2 @ FV e3)" |
-  "FV (FVar y) = [y]" |
-  "FV (BVar k) = []" |
-  "FV (LambdaE e) = FV e" |
-  "FV (AppE e1 e2) = (FV e1 @ FV e2)"
-
-section "Dynamic Semantics via an Interpreter"
-
-text{*
-
-  For the interpreter, we can give meaning to variables either using
-  environments or substitution. However, if we use environments we are
-  then forced to change the value-representation of functions to 
-  remember the values for their free variables. This would cause us difficuties 
-  later in the chapter when defining our logical relation.
-
-  The following defines substitution for bound variables
-  according to the locally-nameless approach, so there is
-  no need to shift $e$ in the lambda case.
-
-*}
 primrec bsubst :: "nat \<Rightarrow> exp \<Rightarrow> exp \<Rightarrow> exp" ("{_\<rightarrow>_}_" [54,54,54] 53) where
   "{j\<rightarrow>e} (Const c) = Const c" |
   "{j\<rightarrow>e} (Prim p e') = Prim p ({j\<rightarrow>e} e')" |
@@ -232,13 +226,6 @@ primrec bsubst :: "nat \<Rightarrow> exp \<Rightarrow> exp \<Rightarrow> exp" ("
   "{j\<rightarrow>e} (BVar k) = (if k = j then e else BVar k)" |
   "{j\<rightarrow>e} (LambdaE e') = LambdaE ({(Suc j)\<rightarrow>e} e')" |
   "{j\<rightarrow>e} (AppE e1 e2) = AppE ({j\<rightarrow>e} e1) ({j\<rightarrow>e} e2)"
-
-text{*
-
-  The substitution of free variables is defined by the following function.
-  We will use this later in our proof of termination for the STLC.
-
-*}
 
 primrec subst :: "var \<Rightarrow> exp \<Rightarrow> exp \<Rightarrow> exp" ("[_\<mapsto>_] _" [72,72,72] 71) where
   "[x\<mapsto>v] (Const c) = (Const c)" |
@@ -266,33 +253,8 @@ lemma msubst_id: fixes e::exp
   assumes rfv: "assoc_dom \<rho> \<inter> set (FV e) = {}" shows "[\<rho>]e = e"
   using rfv apply (induction \<rho> arbitrary: e) apply simp using subst_id by auto
 
-text{*
-
-  The values of this language include both constants (integers and
-  Booleans) and functions. However, because we are using substitution,
-  we shall not introduce a datatype that explicitly identifies the
-  values. Also, to postpone the issue of termination, we shall force
-  our interpreter to halt at a fixed recursion depth. Thus, we add
-  \textit{TimeOut} as one of the possible results.
-
-*}
-
 datatype result = Res exp | Error | TimeOut
 
-
-text{*
-
-  For the interpreter we add new equations for variables, lambdas, and
-  function application. For variables, we simply return an error.  The
-  reason is that, because of substitution, the variables will be gone
-  by the time we evaluate the body of a function.  The equation for
-  lambda just returns the lambda, as it is a value. The interesting
-  new case is for application. We recursively evaluate the operator
-  and operand expressions. The operator needs to be a lambda,
-  in which case we substitute the argument into its body and
-  evaluate.
-
-*}
 
 fun interp :: "exp \<Rightarrow> nat \<Rightarrow> result" where
   "interp (Const c) (Suc n) = Res (Const c)" |
@@ -316,12 +278,6 @@ fun interp :: "exp \<Rightarrow> nat \<Rightarrow> result" where
       | (TimeOut, _) \<Rightarrow> TimeOut | (_, TimeOut) \<Rightarrow> TimeOut | (_,_) \<Rightarrow> Error)" |
   "interp _ 0 = TimeOut"
 
-text{*
-
-  The following two lemmas give inversion principles 
-  in the cases for 'if' and function application.
-
-*}
 
 lemma inv_interp_if: 
   "\<lbrakk> interp (IfE e1 e2 e3) n' = Res v;
@@ -341,13 +297,6 @@ lemma inv_interp_app:
   apply (case_tac exp, auto) apply (case_tac "interp e2 nat", auto)+
 done
 
-text{*
-
-  If the program returns a result with the counter starting at $n$,
-  then it produces the same result for larger numbers.
-
-*}
-
 lemma interp_mono: assumes ie: "interp e n = Res v'" and nn: "n \<le> n'" 
   shows "interp e n' = Res v'"
   using ie nn apply (induction e n arbitrary: v' n' rule: interp.induct)
@@ -362,24 +311,9 @@ lemma interp_mono: assumes ie: "interp e n = Res v'" and nn: "n \<le> n'"
   apply (erule inv_interp_app) apply (case_tac n') apply force apply force
   apply simp
 done
-    
+
 
 section "Reduction Semantics"
-
-text{*
-
-  First we recondisider the full-beta reduction rules using the locally
-  nameless approach. The one change we need to make is in the rule that
-  performs evaluation in the body of a lambda. In this case,
-  the bound variable at index 0 is about to become a free variable
-  (because we are changing our ``focus'' from the entire lambda
-  to its body), so we must substitute index 0 for some fresh
-  name $x$. Once the reduction inside the lambda is complete, we return
-  our focus to the entire lambda, and we need to turn the $x$
-  back into a bound variable with index 0. For this purpose we define the
-  following \textit{close} function.
-
-*}
 
 primrec close :: "nat \<Rightarrow> var \<Rightarrow> exp \<Rightarrow> exp" ("{_\<leftarrow>_}_" [54,54,54] 53) where
   "{j\<leftarrow>x} (Const c) = Const c" |
@@ -390,13 +324,6 @@ primrec close :: "nat \<Rightarrow> var \<Rightarrow> exp \<Rightarrow> exp" ("{
   "{j\<leftarrow>x} (LambdaE e') = LambdaE ({(Suc j)\<leftarrow>x} e')" |
   "{j\<leftarrow>x} (AppE e1 e2) = AppE ({j\<leftarrow>x} e1) ({j\<leftarrow>x} e2)"
 
-text{*
-
-  The rest of the rules for full-beta reduction are straightforward,
-  but it is worth emphasizing how reduction can happen anywhere
-  and any order.
-
-*}
 
 inductive reduce_fb :: "exp \<Rightarrow> exp \<Rightarrow> bool" (infix "\<longmapsto>fb" 70) where
   full_beta[intro!]: "AppE (LambdaE e) e' \<longmapsto>fb ({0\<rightarrow>e'}e)" |
@@ -413,14 +340,6 @@ inductive reduce_fb :: "exp \<Rightarrow> exp \<Rightarrow> bool" (infix "\<long
   c_if2_fb[intro!]: "\<lbrakk> e2 \<longmapsto>fb e2' \<rbrakk> \<Longrightarrow> IfE e1 e2 e3 \<longmapsto>fb IfE e1 e2' e3" |
   c_if3_fb[intro!]: "\<lbrakk> e3 \<longmapsto>fb e3' \<rbrakk> \<Longrightarrow> IfE e1 e2 e3 \<longmapsto>fb IfE e1 e2 e3'" 
 
-text{*
-
-  The following reduction rules are for the call-by-value evaluation
-  strategy for the lambda calculus. In call-by-value, we do not
-  evaluate underneath lambdas and therefore can omit the 
-  somewhat complex \textit{c-lambda} rule.
-
-*}
 
 fun val :: "exp \<Rightarrow> bool" where
   "val (Const c) = True" |
@@ -443,13 +362,6 @@ inductive reduces_bv :: "exp \<Rightarrow> exp \<Rightarrow> bool" (infix "\<lon
  red_bv_cons[intro!]: "\<lbrakk> (e1::exp) \<longmapsto> e2; e2 \<longmapsto>* e3 \<rbrakk> \<Longrightarrow> e1 \<longmapsto>* e3"
 
 
-text{*
-
-  The call-by-name strategy does not evaluate arguments prior to beta
-  reduction. Like call-by-value, it does not reduce under lambda.
-
-*}
-
 inductive reduce_bn :: "exp \<Rightarrow> exp \<Rightarrow> bool" (infix "\<longmapsto>bn" 70) where
   beta_bn[intro!]: "AppE (LambdaE e) e' \<longmapsto>bn ({0\<rightarrow>e'}e)" |
   c_app_bn[intro!]: "\<lbrakk> e1 \<longmapsto>bn e1' \<rbrakk> \<Longrightarrow> AppE e1 e2 \<longmapsto>bn AppE e1' e2" |
@@ -461,33 +373,12 @@ inductive reduce_bn :: "exp \<Rightarrow> exp \<Rightarrow> bool" (infix "\<long
   c_if_bn[intro!]: "\<lbrakk> e1 \<longmapsto>bn e1' \<rbrakk> \<Longrightarrow> IfE e1 e2 e3 \<longmapsto>bn IfE e1' e2 e3"
 
 
-text{*
-
-  We postpone the discussion of the call-by-need evaluation strategy
-  because it requires machninery that we have not yet introduced.
-
-  Interestingly, the outcome of programs in the STLC is the same
-  regardless of the evaluation strategy.
-
-*}
-
 
 section "Type System"
 
-text{*
-
-  As mentioned above, we add a function type that consists
-  of two types: a parameter type and return type.
-
-*}
 
 datatype ty = IntT | BoolT | FunT ty ty (infix "\<rightarrow>" 75)
 
-text{*
-
-  The types for the primitive operators and constants remain the same.
-
-*}
 
 primrec prim_type :: "primitive \<Rightarrow> ty \<times> ty" where
    "prim_type Inc = (IntT, IntT)" |
@@ -504,13 +395,6 @@ fun lookup :: "'a \<Rightarrow> ('a \<times> 'b) list \<Rightarrow> 'b option" w
   "lookup k [] = None" |
   "lookup k ((k',v)#ls) = (if k = k' then Some v else lookup k ls)"
 
-text{*
-
-  The following lemmas establish some simple properties
-  relating the @{term "lookup"} function with list append
-  and with the @{term "assoc_dom"} function.
-
-*}
 
 lemma lookup_app: assumes lx: "lookup x \<Gamma> = Some v" 
   shows "lookup x (\<Gamma>@\<Gamma>') = Some v"
@@ -531,19 +415,6 @@ lemma lookup_dom:
 
 type_synonym ty_env = "(var \<times> ty) list"
 
-text{*
-
-  We define the type system in two different ways. They differ just
-  in the rule for lambdas. The first way is the traditional one. 
-  A lambda is well-typed so long as the body is well typed, 
-  but with any occurences of the DeBruijn index 0 replaced
-  with some fresh free variable. Note that there is a typing
-  rule for free variables but not for bound variables.
-  Because of the substitution in the rule for lambdas, 
-  bound variables disappear before the type system gets
-  a chance to look at them.
-
-*}
 
 inductive wt :: "ty_env \<Rightarrow> exp \<Rightarrow> ty \<Rightarrow> bool" ("_ \<turnstile>o _ : _" [60,60,60] 59) where
   wt_c[intro!]: "\<lbrakk> const_type c = T \<rbrakk> \<Longrightarrow> \<Gamma> \<turnstile>o Const c : T" |
@@ -557,24 +428,6 @@ inductive wt :: "ty_env \<Rightarrow> exp \<Rightarrow> ty \<Rightarrow> bool" (
   wt_a[intro!]: "\<lbrakk> \<Gamma> \<turnstile>o e1 : T \<rightarrow> T'; \<Gamma> \<turnstile>o e2 : T \<rbrakk> 
           \<Longrightarrow> \<Gamma> \<turnstile>o AppE e1 e2 : T'"
 
-text{*
-
-  In the second type system, we strengthen the premise in the lambda rule.
-  Instead of asking that the body of the lambda be well-typed with
-  at least one choice of $x$, we say that it must be well-typed with
-  infinitely many choices of them. Of course, we don't want to require
-  that the body be typed with all choices of variables, because that
-  would make lots of good expressions ill-typed, like expressions
-  that refer to variables bound by outer lambdas. Instead we say
-  that the body must be well-typed for all variables choices except
-  those in some finite set $\mathit{set}\,L$. (Sets in Isabelle may be infinite
-  and Isabelle has direct support for finite sets. However, we
-  find it easier to uses lists to represent finite sets.)
-  This so-called co-finite approach may seem a bit strange at first,
-  but it turns out to be equivalent to the above type system
-  and it is relatively easy to work with.
-
-*}
 
 inductive well_typed :: "ty_env \<Rightarrow> exp \<Rightarrow> ty \<Rightarrow> bool" ("_ \<turnstile> _ : _" [60,60,60] 59) where
   wt_const[intro!]: "\<lbrakk> const_type c = T \<rbrakk> \<Longrightarrow> \<Gamma> \<turnstile> Const c : T" |
@@ -596,12 +449,6 @@ inductive_cases
   inv_wt_lambda[elim!]: "\<Gamma> \<turnstile> LambdaE e : T" and
   inv_wt_app[elim!]: "\<Gamma> \<turnstile> AppE e1 e2 : T"
 
-text{*
-
-  An environment is well typed with respect to a type environment
-  if all its values have the type expected by the type environment.
-
-*}
 
 inductive wt_env :: "ty_env \<Rightarrow> env \<Rightarrow> bool" ("_ \<turnstile> _" [60,60] 59) where
 wt_nil[intro!]: "[] \<turnstile> []" |
@@ -614,12 +461,6 @@ inductive_cases
 
 section "Properties of Substitution" 
 
-text{*
-
-  The use of De Bruijn indices and the locally-nameless approach
-  requires a few technical lemmas. 
-
-*}
 
 lemma bsubst_cross[rule_format]:
   "\<forall> (i::nat) j u v. i \<noteq> j \<and> {i\<rightarrow>u}({j\<rightarrow>v}t) = {j\<rightarrow>v}t \<longrightarrow> {i\<rightarrow>u}t = t"
@@ -638,13 +479,6 @@ lemma bsubst_cross[rule_format]:
     apply force
   done
 
-text{*
-
-  A well-typed expression does not have bound variables that aren't 
-  properly bound, so applying bound-variable substitution does not
-  change the expression.
-
-*}
 
 lemma bsubst_id: fixes e::exp assumes wte: "\<Gamma> \<turnstile> e : T" shows "{k\<rightarrow>e'}e = e"
   using wte apply (induction \<Gamma> e T arbitrary: k e')
@@ -654,22 +488,10 @@ lemma bsubst_id: fixes e::exp assumes wte: "\<Gamma> \<turnstile> e : T" shows "
   apply (rule bsubst_cross) apply blast
   done
 
-text{*
-
-  Applying bound-variable substitution does not affect the free variables
-  of an expression.
-
-*}
 
 lemma fv_bsubst: fixes e::exp and e'::exp shows "set (FV e) \<subseteq> set (FV ({k\<rightarrow>e'}e))"
   by (induction e arbitrary: e' k) force+ (* this is a tad slow *)
 
-text{*
-
-  We can permute the substitution of a bound with the substitution of
-  a free variable under appropriate conditions.
-
-*}
 
 lemma subst_permute:
   fixes x::nat and z::nat and e::exp and e'::exp
@@ -681,13 +503,6 @@ lemma subst_permute:
   using subst_id apply force apply force apply force 
   done
 
-text{*
-
-  The substitution of a bound variable can be decomposed into
-  two steps: substituting the bound variable for a free variable
-  and then substituting for the free variable.
-
-*}
 
 lemma decompose_subst[rule_format]:
   "\<forall> u x i. x \<notin> set (FV e) \<longrightarrow> {i\<rightarrow>u}e = [x\<mapsto>u]({i\<rightarrow>FVar x}e)"
@@ -704,16 +519,6 @@ lemma decompose_subst[rule_format]:
 
 section "Properties of Multiple Substitutions"
 
-text{*
-
-  The definition of multiple substitution is in terms of substitution,
-  which allows us to leverage the lemmas about substitution to prove
-  things about multiple substitution. However, when reasoning about
-  the reslt of multiple substitution on a particular kind of expression,
-  the definition is hard to work with. Hence, we prove the following
-  lemmas and add them to Isabelle's simplifier.
-
-*}
 
 lemma msubst_const[simp]: "[\<rho>]Const c = Const c" by (induction \<rho>) auto
 
@@ -740,13 +545,6 @@ lemma msubst_app[simp]: "[\<rho>]AppE e1 e2 = AppE ([\<rho>]e1) ([\<rho>]e2)"
 
 lemma msubst_lam[simp]: "[\<rho>]LambdaE e = LambdaE ([\<rho>]e)"
   by (induction \<rho> arbitrary: e) auto
-
-text{*
-
-  Like substitution, we can permute multiple substitutions with
-  a bound-variable substitution.
-
-*}
 
 lemma msubst_permute:
   fixes e::exp and \<rho>::env
@@ -834,18 +632,6 @@ qed
 
 section "Substitution Preserves Types"
 
-text{*
-
-  The following proves that substitution preserves types in the STLC.
-  The statement and proof is quite similar to the one in the previous
-  chapter, with the main difference in the case for lambda.
-  The locally-nameless approach introduces several differences compared
-  to the treatment of 'let' in the previous chapter. Note that
-  we make use of several other lemmas here: environment weakening
-  and permuting substitutions of free and bound variables.
-
-*}
-
 abbreviation remove_bind :: "var \<Rightarrow> ty_env \<Rightarrow> ty_env \<Rightarrow> bool" where
   "remove_bind z \<Gamma> \<Gamma>' \<equiv> \<forall>x T. x\<noteq>z \<and> lookup x \<Gamma> = Some T 
             \<longrightarrow> lookup x \<Gamma>' = Some T"
@@ -915,15 +701,6 @@ lemma substitution_preserves_types:
   shows "\<Gamma> \<turnstile> [x \<mapsto> v]M : A" 
   using wtm vb subst_pres_types[of "(x,B)#\<Gamma>" M A x B \<Gamma> v] by auto
 
-text{*
-
-  Preservation of types extends to multiple substitutions in
-  a straightforward way, thanks the way we defined multiple
-  substitution in terms of substitution. Also, the statement
-  of this lemma was arrived at only after some trial and error.
-
-*}
-
 lemma msubst_preserves_types:
   fixes M::exp and \<rho>::env assumes wtm: "\<Gamma>1@\<Gamma>2 \<turnstile> M : A" and sr: "\<Gamma>1 \<turnstile> \<rho>"
   shows "\<Gamma>2 \<turnstile> [\<rho>]M : A" using wtm sr
@@ -949,25 +726,6 @@ qed
 
 section "Adequacy of Locally Nameless Type System"
 
-text{*
-
-The locally nameless type system is equivalent to the normal type
-system for the STLC, a property referred to as ``adequacy''.  The
-following two lemmas prove the two directions of the
-if-and-only-if. In each lemma, only the case for lambda is
-interesting. These lemmas serve as a good example of reasoning
-in the locally-nameless style.
-
-The first lemma shows that the locally-nameless type system implies
-the normal one. To show that the lambda is well-typed, we must
-identify a free variable that is fresh enough, which we do by
-adding one to the max of the variables in $L$ and the free variables
-in $e$. We can then apply the induction hypothesis to show
-that the substitution applied to the body produces a 
-well-typed expression.
-
-*}
-
 lemma adequacy1: fixes e::exp assumes wte: "\<Gamma> \<turnstile> e : T" shows "\<Gamma> \<turnstile>o e : T"
 using wte apply (induction \<Gamma> e T) apply force apply force apply force
 apply force defer apply force
@@ -982,25 +740,6 @@ proof -
     with wt_lambda show "(?X,T1)#\<Gamma> \<turnstile>o ({0\<rightarrow>FVar ?X} e) : T2" by blast
   qed
 qed
-
-text{*
-
-The other direction is a bit trickier. We know that the body of the
-lambda is well typed with a particular free variable $x$ substituted
-for index $0$.  We need to show that it is well-typed for all free
-variables not in some set $L$ of our choosing. We choose the union of
-the free variables in $e$ and the domain of the type environment. Let
-$x'$ be an arbitrary variable not in this $L$. Thus, adding
-$x'$ to the environment $\Gamma$ does not disturb that's already
-there, so we have
-\begin{center}
-@{term "remove_bind x ((x,T1)#\<Gamma>) ((x',T1)#\<Gamma>)"}
-\end{center}
-which is needed to apply the lemma Substitution Preserves Types.
-So we have that @{term "[x\<mapsto>FVar x']({0\<rightarrow>FVar x}e)"} is well
-typed, and that expression is equivalent to @{term "{0\<rightarrow>FVar x'}e"}.
-
-*}
 
 lemma adequacy2: fixes e::exp assumes wte: "\<Gamma> \<turnstile>o e : T" shows "\<Gamma> \<turnstile> e : T"
 using wte apply (induction \<Gamma> e T rule: wt.induct) apply force 
@@ -1030,26 +769,6 @@ section "Termination via a Logical Relations Proof"
 
 subsection "The Logical Predicates"
 
-text{*
-
-  The idea behind a logical relations style proof is to characterize,
-  for each type, what the values for that type look like and what can
-  be done to them.  Specifically, the following function \textit{WTV}
-  maps each type to the set of values that behave properly according
-  to that type. The type \textit{IntT} maps to the set of all
-  integers and the type \textit{BoolT} maps to the set containing
-  True and False.  More interestingly, types of the form @{term
-  "T1\<rightarrow>T2"} are mapped to the set of all lambda expressions that, when
-  applied to an argument of type @{term "T1"}, return a value of type
-  @{term "T2"}.
-
-  Together with \textit{WTV}, we also define the function \textit{WTE}
-  that characterizes the set of expressions that belongs to each type.
-  They are are simply the expression that evaluate to values that
-  behave according to the given type.
-
-*}
-
 
 fun WTE :: "ty \<Rightarrow> exp set" and WTV :: "ty \<Rightarrow> exp set" where
   "WTE T = { e. \<exists> n v. interp e n = Res v \<and> v \<in> WTV T }" |
@@ -1059,25 +778,11 @@ fun WTE :: "ty \<Rightarrow> exp set" and WTV :: "ty \<Rightarrow> exp set" wher
   "WTV (T1\<rightarrow>T2) = {f. \<exists> e. f = LambdaE e \<and> [] \<turnstile>o f : T1 \<rightarrow> T2
      \<and> (\<forall>v\<in>WTV T1.\<exists> n v'. interp ({0\<rightarrow>v} e) n = Res v' \<and> v'\<in>WTV T2)}"
 
-text{*
-
-  In some later proofs it's convenient to have the
-  introduction of \textit{WTE} in the blast tactic
-  and not just in simp.
-
-*}
 
 lemma WTE_intro[intro]: 
   assumes ie: "interp e n = Res v" and vt: "v \<in> WTV T"
   shows "e \<in> WTE T" using ie vt by auto
 
-text{*
-
-  An environment is well behaved if all of the values in the
-  environment behave according to the types specified
-  in the type environment.
-
-*}
 
 fun WTENV :: "ty_env \<Rightarrow> env set" where
   "WTENV [] = { [] }" |
@@ -1111,72 +816,6 @@ lemma wt_dom_fv2: fixes v::exp and T::ty
   assumes wt: "[] \<turnstile> v : T" shows "FV v = []"
   using wt wt_dom_fv[of "[]" v T] adequacy1[of "[]" v T] by auto
 
-
-text{*
-
-  The main lemma below shows that well-typed expressions indeed behave
-  according to their type. We must formulate this lemma in terms of
-  expressions that possibly contain free variables to make the
-  induction hypothesis useful in the case for lambda. To remove
-  the free variables, we take any environment that is well-typed
-  with respect to $\Gamma$ and apply it (via multiple substitutions)
-  to $e$.
-
-  Many of the cases are straightforward, if long, but the case
-  for lambda again is rather tricky. We need to show that
-  @{prop "[\<rho>](LambdaE e) \<in> WTE (T1 \<rightarrow> T2)"}, so it suffices
-  to show @{prop "LambdaE ([\<rho>]e) \<in> WTV (T1 \<rightarrow> T2)"}.
-  Consulting the definition of \textit{WTV}, this means we need
-  to show that
-  \begin{center}
-  @{prop "[] \<turnstile>o LambdaE ([\<rho>]e) : T1 \<rightarrow> T2"}
-  \end{center}
-  and 
-  \begin{center}
-  @{prop "\<forall>v\<in>WTV T1.\<exists>n v'. interp({0\<rightarrow>v}[\<rho>]e) n=Res v' \<and> v'\<in>WTV T2"}
-  \end{center}
-  To show the former, it suffices to show @{prop "[] \<turnstile> LambdaE ([\<rho>]e) : T1 \<rightarrow> T2"}
-  (because of adequacy). Our premise gives us
-  \begin{center}
-  @{prop "[(x,T1)]@\<Gamma> \<turnstile> ({0\<rightarrow>FVar x}e) : T2" }
-  \end{center}
-  and we know that multiple substitutions preserves types.
-  However, to apply that lemma, we need the $\Gamma$ on the outside.
-  So we apply environment weakening to obtain 
-  \begin{center}
-  @{prop "\<Gamma>@[(x,T1)] \<turnstile> ({0\<rightarrow>FVar x}e) : T2" }
-  \end{center}
-  and then because multiple substitutions preserve types, we have
-  \begin{center}
-  @{prop "[(x,T1)] \<turnstile> [\<rho>]({0\<rightarrow>FVar x}e) : T2" }.
-  \end{center}  
-  This is still not quite what we want, so we permute the subsitutions
-  to conclude that 
-  \begin{center}
-  @{prop "[(x,T1)] \<turnstile> ({0\<rightarrow>FVar x}[\<rho>]e) : T2" }.
-  \end{center}  
-
-  Next we turn to proving the important part: 
-  \begin{center}
-  @{prop "\<forall>v\<in>WTV T1.\<exists>n v'. interp({0\<rightarrow>v}[\<rho>]e) n=Res v' \<and> v'\<in>WTV T2"}
-  \end{center}
-  Let $v$ be an arbitrary value in @{term "WTV T1"}.
-  We pick $x$ to be a sufficiently fresh variable.
-  After a little work, the induction hypothesis gives us
-  \begin{center}
-  @{prop "[((x,v)#\<rho>)]({0\<rightarrow>FVar x}e) \<in> WTE T2"}
-  \end{center}
-  So we know that this expression evaluates to some value
-  @{prop "v' \<in> WTV T2" }.
-  By the decomposition and permutation lemmas, we have
-  \begin{center}
-    @{term "[((x,v)#\<rho>)]({0\<rightarrow>FVar x}e)"} 
-   = @{term "[\<rho>]({0\<rightarrow>v}e)"}
-   = @{term "{0\<rightarrow>v}[\<rho>]e"}
-  \end{center}
-  so we can conclude.
-
-*}
 
 lemma WT_implies_WTE: fixes e::exp
   assumes wt: "\<Gamma> \<turnstile> e : T" and wtenv: "\<rho> \<in> WTENV \<Gamma>" and wt_env: "\<Gamma> \<turnstile> \<rho>"
@@ -1349,17 +988,6 @@ proof -
   hence "[] \<turnstile> v : T" by (rule adequacy2)
   with ev show ?thesis by blast
 qed
-
-text{*
-
-\begin{exercise}
-  Add support for pairs and sums to the STLC and update the proof
-  of type safety and termination via logical relations.
-\end{exercise}
-
-*}
-
-(*<*)
-end
-(*>*)
 *)
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
+(* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ fin. *)
