@@ -1,6 +1,12 @@
 (* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ *)
 (** * Correctness theorems for the locally nameless style.
 
+For a lot of these lemmas, changing the order of the dependent
+arguments would allow us to clean up the proofs themselves. However,
+doing so would leave us with inscrutable and unpredictable argument
+order; so we go with the argument order that makes sense, and
+rearange things in the proof as necessary.
+
 TODO:
 - [openVar_close_trivial]
 - [fsubst_is_openTerm_close]
@@ -48,8 +54,8 @@ Require Import LNTerm.
 Section ASubst.
 Context  {Var : Set}.
 Context `{VT : VarType Var}.
-Context {constant  : Set}.
-Context {primitive : Set}.
+Context  {constant  : Set}.
+Context  {primitive : Set}.
 Implicit Type e f g : @Term Var constant primitive.
 Implicit Type x y z : Var.
 Implicit Type i j k : nat.
@@ -86,7 +92,7 @@ Lemma freshin_close_elim
     : forall {x y e} (N : x<>y) (Ix : x \freshin ∇y·e)
     , x \freshin e.
 Proof.
-  intros until e; generalize 0 as i; induction e; simpl; intros;
+  intros x y e; generalize 0 as i; induction e; simpl; intros;
   [ | | apply (IHe (S i)) | | | apply (IHe i) | ]; auto with listset.
   
     destruct_if in Ix; auto; intro H; inversion H; auto; congruence.
@@ -152,12 +158,9 @@ Theorem bsubst_trivial
     : forall i f e (He : LC e)
     , {i ~> f}e = e.
 Proof.
-  refine (fun i f e He => _ e He i f);
-  clear       i f e He.
-  (* HACK: I don't know what's magical about [induction 1] vs [induction e] *)
-  induction 1; intros; simpl; fequal; auto_star.
+  introv He; revert i f; induction He; intros i f; simpl; fequal; auto_star.
   destruct (freshVar xs) as [x Ix].
-  apply (@bsubst_trivial__core t1 0 (Fvar x)); auto_star.
+  apply (@bsubst_trivial__core _ 0 (Fvar x)); auto_star.
 Qed.
 
 
@@ -183,10 +186,7 @@ Corollary bsubst_idempotent
     : forall i f e (Hf : LC f)
     , {i ~> f}{i ~> f}e = {i ~> f}e.
 Proof.
-  (* reorder_induction [i f e Hf] [f Hf] e [i]; *)
-  refine (fun i f e Hf =>    _ f Hf e i);
-  clear       i f e Hf; intros f Hf e;
-  induction e; intro i; simpl; fequal.
+  introv Hf; revert i; induction e; intro i; simpl; fequal.
     (* The one interesting case *)
     if_beq_nat__mantra; apply bsubst_trivial; exact Hf.
 Qed.
@@ -204,10 +204,8 @@ Corollary bsubst_comm
     : forall i f j g e (N : i <> j) (Hf : LC f) (Hg : LC g)
     , {i ~> f}{j ~> g}e = {j ~> g}{i ~> f}e.
 Proof.
-  (* reorder_induction [i f j g e N Hf Hg] [f g Hf Hg] e [i j N]; *)
-  refine (fun i f j g e N Hf Hg =>    _ e f g Hf Hg i j N);
-  clear       i f j g e N Hf Hg; intros e f g Hf Hg;
-  induction e; intros i j N; simpl; try solve [ reflexivity | fequal; auto ].
+  introv N Hf Hg; revert i j N; induction e; intros i j N;
+  simpl; try solve [ reflexivity | fequal; auto ].
     (* The one interesting case *)
     if_beq_nat__mantra; [|symmetry]; apply bsubst_trivial; assumption.
 Qed.
@@ -219,10 +217,7 @@ Theorem fsubst_bsubst_dist
     : forall x f i g e (Hf : LC f)
     , [x ~> f]{i ~> g}e = {i ~> [x ~> f]g}[x ~> f]e.
 Proof.
-  (* reorder_induction [x f i g e Hf] [x f Hf g] e [i]; *)
-  refine (fun x f i g e Hf =>    _ x f Hf g e i).
-  clear       x f i g e Hf; intros x f Hf g e;
-  induction e; intro i; simpl; fequal;
+  introv Hf; revert i; induction e; intro i; simpl; fequal;
     (* TODO: incorporate this into [if_beq_nat__mantra] *)
     [ destruct_if; simpl;
       [ symmetry; apply bsubst_trivial; exact Hf
@@ -266,10 +261,8 @@ Theorem enclose_trivial
     : forall i x e (Ix : x \freshin e)
     , {i <~ x}e = e.
 Proof.
-  (* TODO: incorporate into [reorder_induction] *)
-  refine (fun i x e Ix =>    _ x e Ix i);
-  clear       i x e Ix; intros x e Ix.
-  induction e; intro i; simpl; simpl in Ix; fequal; eauto with listset;
+  introv Ix; revert i; induction e; intro i;
+  simpl; simpl in Ix; fequal; eauto with listset;
     [ destruct_if; ex_falso Ix by left
     (* TODO: better automation to cover these two cases... *)
     | apply IHe2; auto with listset
@@ -498,7 +491,7 @@ Theorem fsubst_trivial
     : forall x f e (Ix : x \freshin e)
     , [x ~> f]e = e.
 Proof.
-  intros. induction e; simpl;
+  intros; induction e; simpl;
     (* Handle the boring IH cases. The [simpl] is unnecessary, but
        cleans up the proof considerably in the [Juxt] case. Also,
        the [Juxt] case is the one that requires [eauto] instead of
@@ -524,7 +517,7 @@ Corollary fsubst_idempotent
     : forall x f e (Ix : x \freshin f)
     , [x ~> f][x ~> f]e = [x ~> f]e.
 Proof.
-  intros. induction e; simpl; fequal;
+  intros; induction e; simpl; fequal;
     [ destruct_if; simpl; [ apply fsubst_trivial; exact Ix | destruct_if ]].
 Qed.
 
@@ -535,7 +528,7 @@ Theorem fsubst_comm
     : forall x f y g e (N : x <> y) (Ix : x \freshin g) (Iy : y \freshin f)
     , [x ~> f][y ~> g]e = [y ~> g][x ~> f]e.
 Proof.
-  intros. induction e; simpl; [|fequal..]; (* why do we need hand-holding? *)
+  intros; induction e; simpl; [|fequal..]; (* why do we need hand-holding? *)
     [ if_beq_nat__mantra; [|symmetry]; apply fsubst_trivial; assumption ].
 Qed.
 
@@ -678,7 +671,7 @@ Theorem LC_fsubst
     : forall x f e (Hf : LC f) (He : LC e)
     , LC ([x ~> f]e).
 Proof.
-  intros. induction He; simpl; (* N.B., that's induction on [He] not [e]! *)
+  intros; induction He; simpl; (* N.B., that's induction on [He] not [e]! *)
     (* Handle the boring cases *)
     try solve [constructor; assumption];
     (* Two interesting cases remain *)
