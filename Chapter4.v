@@ -360,7 +360,7 @@ Fixpoint interp (e0:exp) (n0:nat) : result :=
             | Result c' => Res (Const c')
             | PError    => Error
             end
-        | Res _   => Error (* HACK: this case wasn't covered in Isabelle! *)
+        | Res _   => Error (* N.B., this case wasn't covered in Isabelle!! *)
         | Error   => Error
         | TimeOut => TimeOut
         end
@@ -384,6 +384,7 @@ Fixpoint interp (e0:exp) (n0:nat) : result :=
     end.
 
 
+(* Note how we've translated Isabelle's [\<longrightarrow>] here. *)
 Lemma inv_interp_if
     :  forall e1 e2 e3 n' v P
     ,  interp (IfE e1 e2 e3) n' = Res v
@@ -394,13 +395,13 @@ Lemma inv_interp_if
         -> P)
     -> P.
 Proof.
-  (* all the inversions on H are to prune off impossible branches *)
+  (* all the discrimination on H is to prune off impossible branches. We could also use [inversion] instead of [distriminate]. *)
   intros.
-  destruct n'; simpl in *; try solve [inversion H].
+  destruct n'; simpl in *; try solve [discriminate H].
   remember (interp e1 n'). (* Introduces an equality, needed for #1 *)
-  destruct r; try solve [inversion H].
-  destruct e; try solve [inversion H].
-  destruct c; try solve [inversion H].
+  destruct r; try solve [discriminate H].
+  destruct e; try solve [discriminate H].
+  destruct c; try solve [discriminate H].
   apply (X n' b). (* N.B., if we change P to (P:Prop) then X becomes H0 *)
     reflexivity.
     
@@ -410,16 +411,70 @@ Proof.
 Qed.
 
 
-(*
-lemma inv_interp_app:
-  "\<lbrakk> interp (AppE e1 e2) n' = Res v;
-     \<And> n e v2. \<lbrakk> n' = Suc n; interp e1 n = Res (LambdaE e); 
-                 interp e2 n = Res v2; interp (bsubst 0 v2 e) n = Res v
-    \<rbrakk> \<Longrightarrow> P \<rbrakk> \<Longrightarrow> P"
-  apply (case_tac n') apply force apply (case_tac "interp e1 nat", auto)
-  apply (case_tac exp, auto) apply (case_tac "interp e2 nat", auto)+
-done
+Lemma inv_interp_app
+    : forall e1 e2 n' v P
+    , interp (AppE e1 e2) n' = Res v
+    -> (forall n e v2
+        , n' = S n
+        -> interp e1 n = Res (LambdaE e)
+        -> interp e2 n = Res v2
+        -> interp (bsubst 0 v2 e) n = Res v
+        -> P)
+    -> P.
+Proof.
+  intros.
+  destruct n'; simpl in *; try solve [discriminate H].
+  (* N.B., we want semicolons here! Otherwise we'll have to repeat ourselves *)
+  remember (interp e1 n'); destruct r; try solve [discriminate H];
+  remember (interp e2 n'); destruct r; try solve [discriminate H]; 
+  destruct e; try solve [discriminate H];
+  apply (X n' e e0); congruence.
+Qed.
 
+
+(* Yuck! this proof needs major cleaning!! *)
+Lemma interp_mono
+    : forall m e n v, m <= n -> interp e m = Res v -> interp e n = Res v.
+Proof.
+  intro m; induction m as [| m'];
+  intros e n v m_le_n H;
+  destruct e; simpl in H;
+  (* eight cases total; three are absurd *)
+  try solve [discriminate H];
+  (* five cases remain. In each case we destruct [n] so we can compute one step. *)
+  (case_eq n; simpl; intros;
+    [ elimtype False; omega
+    | subst n; apply le_S_n in m_le_n
+    ]).
+    
+      assumption.
+      
+      remember (interp e m'); destruct r; try solve [discriminate H].
+      destruct e0; try solve [discriminate H].
+      remember (eval_prim p c); destruct p0; try solve [discriminate H].
+      rewrite (IHm' e n0 (Const c) m_le_n (eq_sym Heqr)).
+      rewrite <- Heqp0.
+      exact H.
+      
+      remember (interp e1 m'); destruct r; try solve [discriminate H].
+      destruct e; try solve [discriminate H].
+      destruct c; try solve [discriminate H].
+      rewrite (IHm' e1 n0 (Const (BoolC b)) m_le_n (eq_sym Heqr)).
+      destruct b; apply IHm'; auto.
+      
+      assumption.
+      
+      (* N.B., semicolons! and destructing [interp e2 m'] before [e] *)
+      remember (interp e1 m'); destruct r; try solve [discriminate H];
+      remember (interp e2 m'); destruct r; try solve [discriminate H];
+      destruct e; try solve [discriminate H].
+      rewrite (IHm' e1 n0 (LambdaE e) m_le_n (eq_sym Heqr)).
+      rewrite (IHm' e2 n0 e0 m_le_n (eq_sym Heqr0)).
+      apply IHm'; auto.
+Qed.
+
+  
+(*
 lemma interp_mono: assumes ie: "interp e n = Res v'" and nn: "n \<le> n'" 
   shows "interp e n' = Res v'"
   using ie nn apply (induction e n arbitrary: v' n' rule: interp.induct)
